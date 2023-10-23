@@ -1,0 +1,18 @@
+inherit_from: configs/Replica/replica.yaml
+tracking:
+  rp: True
+  rp_type: pre_1
+  rp_file: dkmu_pre1_10000.npy
+  rp_num: 20
+  w_rp_loss: 10
+mapping:
+  bound: [[-1.9,7.9],[-2.2,4.5],[-2.5,2.3]]
+  marching_cubes_bound: [[-1.9,7.9],[-2.2,4.5],[-2.5,2.3]]
+  rp: False
+  rp_type: pre_1
+  rp_file:
+  rp_num: 10
+  w_rp_loss: 
+data:
+  input_folder: Datasets/Replica/room0
+  output: output/Replica/room0_rp

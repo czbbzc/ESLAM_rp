@@ -43,6 +43,7 @@ import argparse
 
 from src import config
 from src.ESLAM import ESLAM
+from src.ESLAM_rp import ESLAM_rp
 
 def main():
     parser = argparse.ArgumentParser(
@@ -53,11 +54,21 @@ def main():
                         help='input folder, this have higher priority, can overwrite the one in config file')
     parser.add_argument('--output', type=str,
                         help='output folder, this have higher priority, can overwrite the one in config file')
-    args = parser.parse_args()
-
-    cfg = config.load_config(args.config, 'configs/ESLAM.yaml')
     
-    eslam = ESLAM(cfg, args)
+    parser.add_argument('--rp', type=bool, default=True, help="whether to use rp_loss")
+    
+    args = parser.parse_args()
+    
+    if args.rp:
+        print('loading ESLAM_rp method')
+        
+        cfg = config.load_config(args.config, 'configs/ESLAM_rp.yaml')
+        eslam = ESLAM_rp(cfg, args)
+    else:
+
+        cfg = config.load_config(args.config, 'configs/ESLAM.yaml')
+        
+        eslam = ESLAM(cfg, args)
 
     eslam.run()
 

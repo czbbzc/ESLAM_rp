@@ -139,7 +139,43 @@ def select_uv(i, j, n, b, depths, colors, device='cuda:0'):
     depths = torch.gather(depths, 1, indices)  # (b, n)
     colors = torch.gather(colors, 1, indices.unsqueeze(-1).expand(-1, -1, 3))  # (b, n, 3)
 
-    return i, j, depths, colors
+    return i, j, depths, colors, indices
+
+def select_uv_rp(H0, H1, W0, W1, i, j, n, b, rp_num, depths, colors, cpd, device='cuda:0'):
+    """
+    Select n uv from dense uv.
+
+    """
+    
+    mask = (cpd[...,0] > W0) & (cpd[...,0] < W1) & (cpd[...,1] > H0) & (cpd[...,1] < H1) & (cpd[...,2] > W0) & (cpd[...,2] < W1) & (cpd[...,3] > H0) & (cpd[...,3] < H1)
+    cpd = cpd[mask]
+    indexs_cpd = torch.randint(len(cpd), (rp_num*b,), device=device)
+    cpd = cpd[indexs_cpd]   # (rp_num,5)
+    rp_pos = torch.round(cpd[...,:2] - 0.5)
+    indexs_rp = (rp_pos[...,0] - W0) + (rp_pos[...,1]-H0) * (W1 - W0)
+    indexs_rp = indexs_rp.long()
+    
+    i = i.reshape(-1)
+    j = j.reshape(-1)
+    indices = torch.randint(i.shape[0], ((n-rp_num) * b,), device=device)
+    indices = indices.clamp(0, i.shape[0])
+    
+    indices = torch.cat([indices,indexs_rp],dim=0)
+    
+    i = i[indices]  # (n * b)
+    j = j[indices]  # (n * b)
+
+    indices = indices.reshape(b, -1)
+    i = i.reshape(b, -1)
+    j = j.reshape(b, -1)
+
+    depths = depths.reshape(b, -1)
+    colors = colors.reshape(b, -1, 3)
+
+    depths = torch.gather(depths, 1, indices)  # (b, n)
+    colors = torch.gather(colors, 1, indices.unsqueeze(-1).expand(-1, -1, 3))  # (b, n, 3)
+
+    return i, j, depths, colors, cpd
 
 def get_sample_uv(H0, H1, W0, W1, n, b, depths, colors, device='cuda:0'):
     """
@@ -153,9 +189,25 @@ def get_sample_uv(H0, H1, W0, W1, n, b, depths, colors, device='cuda:0'):
 
     i = i.t()  # transpose
     j = j.t()
-    i, j, depth, color = select_uv(i, j, n, b, depths, colors, device=device)
+    i, j, depth, color, indices = select_uv(i, j, n, b, depths, colors, device=device)
 
-    return i, j, depth, color
+    return i, j, depth, color, indices
+
+def get_sample_uv_rp(H0, H1, W0, W1, n, b, rp_num, depths, colors, cpd, device='cuda:0'):
+    """
+    Sample n uv coordinates from an image region H0..H1, W0..W1
+
+    """
+    depths = depths[:, H0:H1, W0:W1]
+    colors = colors[:, H0:H1, W0:W1]
+
+    i, j = torch.meshgrid(torch.linspace(W0, W1 - 1, W1 - W0, device=device), torch.linspace(H0, H1 - 1, H1 - H0, device=device))
+
+    i = i.t()  # transpose
+    j = j.t()
+    i, j, depth, color, cpd = select_uv_rp(H0, H1, W0, W1, i, j, n, b, rp_num, depths, colors, cpd, device=device)
+
+    return i, j, depth, color, cpd
 
 def get_samples(H0, H1, W0, W1, n, H, W, fx, fy, cx, cy, c2ws, depths, colors, device):
     """
@@ -164,12 +216,42 @@ def get_samples(H0, H1, W0, W1, n, H, W, fx, fy, cx, cy, c2ws, depths, colors, d
 
     """
     b = c2ws.shape[0]
-    i, j, sample_depth, sample_color = get_sample_uv(
+    i, j, sample_depth, sample_color, indices = get_sample_uv(
         H0, H1, W0, W1, n, b, depths, colors, device=device)
 
     rays_o, rays_d = get_rays_from_uv(i, j, c2ws, H, W, fx, fy, cx, cy, device)
 
     return rays_o.reshape(-1, 3), rays_d.reshape(-1, 3), sample_depth.reshape(-1), sample_color.reshape(-1, 3)
+
+def get_samples_gt(H0, H1, W0, W1, n, H, W, fx, fy, cx, cy, c2ws, c2w_gt, depths, colors, device):
+    """
+    Get n rays from the image region H0..H1, W0..W1.
+    c2w is its camera pose and depth/color is the corresponding image tensor.
+
+    """
+    b = c2ws.shape[0]
+    i, j, sample_depth, sample_color, indices = get_sample_uv(
+        H0, H1, W0, W1, n, b, depths, colors, device=device)
+
+    rays_o, rays_d = get_rays_from_uv(i, j, c2ws, H, W, fx, fy, cx, cy, device)
+    
+    rays_o_gt, rays_d_gt = get_rays_from_uv(i, j, c2w_gt, H, W, fx, fy, cx, cy, device)
+
+    return rays_o.reshape(-1, 3), rays_d.reshape(-1, 3), sample_depth.reshape(-1), sample_color.reshape(-1, 3), indices, rays_o_gt.reshape(-1, 3), rays_d_gt.reshape(-1, 3)
+
+def get_samples_rp(H0, H1, W0, W1, n, rp_num, H, W, fx, fy, cx, cy, c2ws, depths, colors, cpd, device):
+    """
+    Get n rays from the image region H0..H1, W0..W1.
+    c2w is its camera pose and depth/color is the corresponding image tensor.
+
+    """
+    b = c2ws.shape[0]
+    i, j, sample_depth, sample_color, sample_cpd = get_sample_uv_rp(
+        H0, H1, W0, W1, n, b, rp_num, depths, colors, cpd, device=device)
+
+    rays_o, rays_d = get_rays_from_uv(i, j, c2ws, H, W, fx, fy, cx, cy, device)
+
+    return rays_o.reshape(-1, 3), rays_d.reshape(-1, 3), sample_depth.reshape(-1), sample_color.reshape(-1, 3), sample_cpd.reshape(-1, 3)
 
 def matrix_to_cam_pose(batch_matrices, RT=True):
     """
