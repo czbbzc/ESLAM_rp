@@ -36,7 +36,7 @@ class RpMapper(Mapper.Mapper):
         
         self.frame_reader = get_dataset(cfg, args, self.scale, device=self.device, rp=self.rp, rp_file=self.rp_file)
         self.n_img = len(self.frame_reader)
-        self.frame_loader = DataLoader(self.frame_reader, batch_size=1, num_workers=1, pin_memory=True,
+        self.frame_loader = DataLoader(self.frame_reader, batch_size=1, num_workers=1, pin_memory=False,
                                        prefetch_factor=2, sampler=SeqSampler(self.n_img, self.every_frame))
 
         self.visualizer = Frame_Visualizer(freq=cfg['mapping']['vis_freq'], inside_freq=cfg['mapping']['vis_inside_freq'],

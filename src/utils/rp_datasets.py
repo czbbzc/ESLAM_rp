@@ -26,7 +26,7 @@ class SeqSampler(Sampler):
     def __len__(self) -> int:
         return self.n_samples
 
-def get_dataset(cfg, args, scale, device='cuda:0'):
+def get_dataset(cfg, args, scale, device='cuda:0', rp=False, rp_file=None):
     return dataset_dict[cfg['dataset']](cfg, args, scale, device=device, rp=rp, rp_file=rp_file)
 
 class BaseDataset(Dataset):
@@ -109,10 +109,10 @@ class Replica(BaseDataset):
         self.n_img = len(self.color_paths)
         self.load_poses(f'{self.input_folder}/traj.txt')
         
-        self.color_paths = self.color_paths[:300]
-        self.depth_paths = self.depth_paths[:300]
-        self.poses = self.poses[:300]
-        self.n_img = len(self.color_paths)
+        # self.color_paths = self.color_paths[:300]
+        # self.depth_paths = self.depth_paths[:300]
+        # self.poses = self.poses[:300]
+        # self.n_img = len(self.color_paths)
         
         if rp:
             self.correspondence = np.ones([self.n_img,200,5])

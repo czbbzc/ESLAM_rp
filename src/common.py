@@ -138,6 +138,8 @@ def select_uv(i, j, n, b, depths, colors, device='cuda:0'):
 
     depths = torch.gather(depths, 1, indices)  # (b, n)
     colors = torch.gather(colors, 1, indices.unsqueeze(-1).expand(-1, -1, 3))  # (b, n, 3)
+    
+    indices = indices.squeeze(0)
 
     return i, j, depths, colors, indices
 

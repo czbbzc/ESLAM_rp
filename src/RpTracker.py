@@ -28,7 +28,7 @@ class RpTracker(Tracker.Tracker):
         self.frame_reader = get_dataset(cfg, args, self.scale, device=self.device, rp=self.rp, rp_file=self.rp_file)
         self.n_img = len(self.frame_reader)
         self.frame_loader = DataLoader(self.frame_reader, batch_size=1, shuffle=False,
-                                       num_workers=1, pin_memory=True, prefetch_factor=2)
+                                       num_workers=1, pin_memory=False, prefetch_factor=2)
 
         self.visualizer = Frame_Visualizer(freq=cfg['tracking']['vis_freq'], inside_freq=cfg['tracking']['vis_inside_freq'],
                                            vis_dir=os.path.join(self.output, 'tracking_vis'), renderer=self.renderer,
@@ -85,7 +85,7 @@ class RpTracker(Tracker.Tracker):
         #                                                                          self.ignore_edge_W, W-self.ignore_edge_W,
         #                                                                          batch_size, H, W, fx, fy, cx, cy, c2w,
         #                                                                          gt_depth, gt_color, device)
-        batch_rays_o, batch_rays_d, batch_gt_depth, batch_gt_color, self.indices, batch_rays_o_gt, batch_rays_d_gt = get_samples(self.ignore_edge_H, H-self.ignore_edge_H,
+        batch_rays_o, batch_rays_d, batch_gt_depth, batch_gt_color, self.indices, batch_rays_o_gt, batch_rays_d_gt = get_samples_gt(self.ignore_edge_H, H-self.ignore_edge_H,
                                                                                  self.ignore_edge_W, W-self.ignore_edge_W,
                                                                                  batch_size, H, W, fx, fy, cx, cy, c2w, c2w_gt, 
                                                                                  gt_depth, gt_color, device)
@@ -130,7 +130,7 @@ class RpTracker(Tracker.Tracker):
             rp_loss = self.reprojection_loss_gt(depth, batch_rays_o, batch_rays_d, batch_rays_o_gt, batch_rays_d_gt, batch_gt_depth, idx)
             loss += self.w_rp_loss * rp_loss
             
-            print(sdf_loss.item(), depth_loss.item(),color_loss.item(),rp_loss.item(),depth.mean().item())
+            # print(sdf_loss.item(), depth_loss.item(),color_loss.item(),rp_loss.item(),depth.mean().item())
 
         optimizer.zero_grad()
         loss.backward()
@@ -163,16 +163,21 @@ class RpTracker(Tracker.Tracker):
         self.gt_color = self.gt_color.cpu().numpy() * 255
         pre1 = self.pre_color.clone().cpu().numpy() * 255
         pre2 = self.pre_color.clone().cpu().numpy() * 255
+        
+        gt_color1 = self.gt_color.squeeze(0)
+        pre11 = pre1.squeeze(0)
+        pre22 = pre2.squeeze(0)
+        
         for nd in range(3):
-            cv2.circle(self.gt_color, tuple([int(w[nd]),int(h[nd])]), 2, (0, 255, 0), -1)
+            cv2.circle(gt_color1, tuple([int(w[nd]),int(h[nd])]), 2, (0, 255, 0), -1)
             # cv2.circle(depth1, tuple([int(point_a[0]),int(point_a[1])]), 3, (0, 255, 0), -1)
             
-            cv2.circle(pre1, tuple([int(repro_idx_gt[nd][0]),int(repro_idx_gt[nd][1])]), 2, (0, 255, 0), -1)
-            cv2.circle(pre2, tuple([int(repro_idx[nd][0]),int(repro_idx[nd][1])]), 2, (0, 255, 0), -1)
+            cv2.circle(pre11, tuple([int(repro_idx_gt[nd][0]),int(repro_idx_gt[nd][1])]), 2, (0, 255, 0), -1)
+            cv2.circle(pre22, tuple([int(repro_idx[nd][0]),int(repro_idx[nd][1])]), 2, (0, 255, 0), -1)
 
-        cv2.imwrite(f'imgs/image_a_with_point4.png', self.gt_color)
-        cv2.imwrite(f'imgs/image_b_with_point4.png', pre1)
-        cv2.imwrite(f'imgs/image_c_with_point4.png', pre2)
+        cv2.imwrite(f'imgs/image_a_with_point4.png', gt_color1)
+        cv2.imwrite(f'imgs/image_b_with_point4.png', pre11)
+        cv2.imwrite(f'imgs/image_c_with_point4.png', pre22)
         
         mask = (repro_idx_gt[...,0]>self.ignore_edge_H) & (repro_idx_gt[...,0]<self.H_final) & (repro_idx_gt[...,1]>self.ignore_edge_W) & (repro_idx_gt[...,1]<self.W_final)
         return self.L1_loss(repro_idx_gt[mask],repro_idx[mask])
