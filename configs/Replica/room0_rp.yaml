@@ -14,5 +14,5 @@ mapping:
   rp_num: 10
   w_rp_loss: 
 data:
-  input_folder: Datasets/Replica/room0
+  input_folder: ../Datasets/Replica/room0
   output: output/Replica/room0_rp
